@@ -39,10 +39,10 @@ export interface ScoreAuditLog {
 }
 
 const INITIAL_TEAMS: Team[] = [
-  { id: '1', name: 'Equipe Amarela', color_hex: '#F59E0B', teacher_in_charge: 'Prof. Carlos', total_score: 0 },
-  { id: '2', name: 'Equipe Azul', color_hex: '#3B82F6', teacher_in_charge: 'Profa. Mariana', total_score: 0 },
-  { id: '3', name: 'Equipe Verde', color_hex: '#10B981', teacher_in_charge: 'Prof. Roberto', total_score: 0 },
-  { id: '4', name: 'Equipe Vermelha', color_hex: '#EF4444', teacher_in_charge: 'Profa. Ana', total_score: 0 },
+  { id: '1', name: 'Equipe Amarela', color_hex: '#D97706', teacher_in_charge: 'Prof. Carlos', total_score: 0 },
+  { id: '2', name: 'Equipe Azul', color_hex: '#2563EB', teacher_in_charge: 'Profa. Mariana', total_score: 0 },
+  { id: '3', name: 'Equipe Verde', color_hex: '#059669', teacher_in_charge: 'Prof. Roberto', total_score: 0 },
+  { id: '4', name: 'Equipe Vermelha', color_hex: '#DC2626', teacher_in_charge: 'Profa. Ana', total_score: 0 },
 ];
 
 const INITIAL_SCHEDULE: ScheduleItem[] = [
@@ -91,7 +91,7 @@ export default function App() {
       setSelectedTeamId(loginTeamSelect);
       setIsAuthenticated(true);
     } else {
-      alert('Palavra-passe incorreta! Utilize "admin2026" para Comissão ou "lider2026" para Líderes.');
+      alert('Senha incorreta! Utilize "admin2026" para Comissão ou "lider2026" para Líderes.');
     }
   };
 
@@ -157,7 +157,7 @@ export default function App() {
 
   const handleDeleteScheduleItem = (id: string) => {
     if (userRole !== 'ADMIN') return;
-    if (confirm('Tem a certeza de que deseja remover este evento do cronograma?')) {
+    if (confirm('Tem certeza de que deseja remover este evento do cronograma?')) {
       setSchedule(prev => prev.filter(item => item.id !== id));
     }
   };
@@ -191,12 +191,12 @@ export default function App() {
             </div>
 
             <div>
-              <label className="block text-xs font-bold text-slate-700 mb-1">Palavra-passe de Acesso</label>
+              <label className="block text-xs font-bold text-slate-700 mb-1">Senha de Acesso</label>
               <input 
                 type="password" 
                 value={loginPassword}
                 onChange={(e) => setLoginPassword(e.target.value)}
-                placeholder="Insira a palavra-passe"
+                placeholder="Insira a sua senha"
                 className="w-full text-sm p-3 border border-slate-300 rounded-lg bg-slate-50"
                 required
               />
@@ -323,7 +323,10 @@ export default function App() {
                       <span className="text-[10px] font-black uppercase tracking-wider text-slate-400">
                         {index + 1}º LUGAR
                       </span>
-                      <h4 className="text-base font-bold text-slate-800">{team.name}</h4>
+                      {/* Nome da Equipe com a cor selecionada */}
+                      <h4 className="text-lg font-extrabold" style={{ color: team.color_hex }}>
+                        {team.name}
+                      </h4>
                     </div>
                   </div>
 
@@ -347,7 +350,10 @@ export default function App() {
                     <div className="flex items-center gap-3">
                       <div className="w-5 h-10 rounded-md" style={{ backgroundColor: team.color_hex }}></div>
                       <div>
-                        <h2 className="text-xl font-black text-slate-800">{team.name}</h2>
+                        {/* Nome da Equipe impresso com a própria cor */}
+                        <h2 className="text-2xl font-black" style={{ color: team.color_hex }}>
+                          {team.name}
+                        </h2>
                         <p className="text-xs text-slate-500">Professor Responsável: <strong>{team.teacher_in_charge}</strong></p>
                       </div>
                     </div>
@@ -556,7 +562,8 @@ export default function App() {
                   type="text" 
                   value={editingTeam.name}
                   onChange={(e) => setEditingTeam({ ...editingTeam, name: e.target.value })}
-                  className="w-full text-xs p-2 border border-slate-300 rounded-lg"
+                  className="w-full text-xs p-2 border border-slate-300 rounded-lg font-bold"
+                  style={{ color: editingTeam.color_hex }}
                   required
                 />
               </div>
@@ -573,19 +580,19 @@ export default function App() {
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">Cor da Equipe (Hexadecimal)</label>
+                <label className="block text-xs font-bold text-slate-700 mb-1">Escolher Cor da Equipe</label>
                 <div className="flex gap-2 items-center">
                   <input 
                     type="color" 
                     value={editingTeam.color_hex}
                     onChange={(e) => setEditingTeam({ ...editingTeam, color_hex: e.target.value })}
-                    className="w-10 h-8 p-0 border border-slate-300 rounded cursor-pointer"
+                    className="w-12 h-9 p-0.5 border border-slate-300 rounded cursor-pointer"
                   />
                   <input 
                     type="text" 
                     value={editingTeam.color_hex}
                     onChange={(e) => setEditingTeam({ ...editingTeam, color_hex: e.target.value })}
-                    className="w-full text-xs p-2 border border-slate-300 rounded-lg font-mono"
+                    className="w-full text-xs p-2 border border-slate-300 rounded-lg font-mono uppercase"
                     required
                   />
                 </div>
@@ -603,7 +610,7 @@ export default function App() {
                   type="submit"
                   className="px-3 py-1.5 bg-amber-600 text-white rounded-lg text-xs font-bold"
                 >
-                  Guardar Alterações
+                  Salvar Alterações
                 </button>
               </div>
             </form>
