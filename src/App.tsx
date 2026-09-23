@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { 
   Trophy, ShieldAlert, Users, Plus, 
-  BarChart3, LogOut, Edit3, Calendar, MapPin, Clock, CheckCircle2, AlertCircle
+  BarChart3, LogOut, Edit3, Calendar, MapPin, Clock, Key, RefreshCw
 } from 'lucide-react';
 import { supabase } from './supabaseClient';
 
@@ -26,6 +26,11 @@ export interface EventItem {
   status: 'PENDENTE' | 'EM_ANDAMENTO' | 'CONCLUIDO';
 }
 
+export interface TeamPassword {
+  team_id: string;
+  password: string;
+}
+
 export default function App() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [userRole, setUserRole] = useState<UserRole>('LIDER');
@@ -35,9 +40,12 @@ export default function App() {
   const [loginTeamSelect, setLoginTeamSelect] = useState('');
 
   const [teams, setTeams] = useState<Team[]>([]);
+  const [eventsList, setEventsList] = useState<EventItem[]>([]);
+  const [passwordsList, setPasswordsList] = useState<TeamPassword[]>([]);
+  
   const [loading, setLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'equipe' | 'eventos'>('dashboard');
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'equipe' | 'eventos' | 'seguranca'>('dashboard');
 
   // Modais
   const [editTeamModalOpen, setEditTeamModalOpen] = useState(false);
@@ -47,53 +55,28 @@ export default function App() {
   const [targetTeamId, setTargetTeamId] = useState('');
   const [pointsDelta, setPointsDelta] = useState<number>(0);
 
-  // Lista de Eventos / Provas da Gincana
-  const [eventsList, setEventsList] = useState<EventItem[]>([
-    {
-      id: '1',
-      title: 'Abertura & Desfile das Equipes',
-      date: '2026-05-10',
-      time: '08:00',
-      location: 'Quadra Coberta',
-      points: 100,
-      description: 'Apresentação do grito de guerra, bandeira e caracterização dos integrantes de cada equipe.',
-      status: 'PENDENTE'
-    },
-    {
-      id: '2',
-      title: 'Prova Solidária - Arrecadação de Alimentos',
-      date: '2026-05-12',
-      time: '14:00',
-      location: 'Pátio Central',
-      points: 300,
-      description: 'Contagem dos alimentos não perecíveis doados pelas equipes.',
-      status: 'PENDENTE'
-    },
-    {
-      id: '3',
-      title: 'Circuito Esportivo e Recreativo',
-      date: '2026-05-15',
-      time: '09:00',
-      location: 'Campo e Quadra',
-      points: 200,
-      description: 'Competições esportivas e gincana de agilidade entre as turmas.',
-      status: 'PENDENTE'
-    }
-  ]);
+  const [newEventModalOpen, setNewEventModalOpen] = useState(false);
+  const [newEvent, setNewEvent] = useState({
+    title: '',
+    date: '',
+    time: '',
+    location: '',
+    points: 100,
+    description: ''
+  });
 
-  // Buscar equipes do Supabase
+  const [changePasswordModalOpen, setChangePasswordModalOpen] = useState(false);
+  const [newPasswordInput, setNewPasswordInput] = useState('');
+
   useEffect(() => {
-    fetchTeams();
+    fetchAllData();
 
+    // Inscrição Realtime no Supabase
     const channel = supabase
-      .channel('schema-db-changes')
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'teams' },
-        () => {
-          fetchTeams();
-        }
-      )
+      .channel('schema-changes')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'teams' }, () => fetchTeams())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'events' }, () => fetchEvents())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'team_passwords' }, () => fetchPasswords())
       .subscribe();
 
     return () => {
@@ -101,28 +84,31 @@ export default function App() {
     };
   }, []);
 
-  const fetchTeams = async () => {
-    try {
-      setLoading(true);
-      const { data, error } = await supabase
-        .from('teams')
-        .select('*')
-        .order('total_score', { ascending: false });
+  const fetchAllData = async () => {
+    setLoading(true);
+    await Promise.all([fetchTeams(), fetchEvents(), fetchPasswords()]);
+    setLoading(false);
+  };
 
-      if (error) {
-        console.error('Erro ao buscar equipes:', error.message);
-      } else if (data) {
-        setTeams(data);
-        if (data.length > 0 && !loginTeamSelect) {
-          setLoginTeamSelect(data[0].id);
-          setTargetTeamId(data[0].id);
-        }
+  const fetchTeams = async () => {
+    const { data } = await supabase.from('teams').select('*').order('total_score', { ascending: false });
+    if (data) {
+      setTeams(data);
+      if (data.length > 0 && !loginTeamSelect) {
+        setLoginTeamSelect(data[0].id);
+        setTargetTeamId(data[0].id);
       }
-    } catch (err: any) {
-      console.error('Erro de conexão ao buscar:', err);
-    } finally {
-      setLoading(false);
     }
+  };
+
+  const fetchEvents = async () => {
+    const { data } = await supabase.from('events').select('*').order('date', { ascending: true });
+    if (data) setEventsList(data as EventItem[]);
+  };
+
+  const fetchPasswords = async () => {
+    const { data } = await supabase.from('team_passwords').select('*');
+    if (data) setPasswordsList(data);
   };
 
   const handleLogin = (e: React.FormEvent) => {
@@ -130,45 +116,43 @@ export default function App() {
     if (loginPassword === 'admin2026') {
       setUserRole('ADMIN');
       setIsAuthenticated(true);
-    } else if (loginPassword === 'lider2026') {
+      return;
+    }
+
+    const teamPass = passwordsList.find(p => p.team_id === loginTeamSelect);
+    const validPassword = teamPass ? teamPass.password : 'lider2026';
+
+    if (loginPassword === validPassword) {
       setUserRole('LIDER');
       setSelectedTeamId(loginTeamSelect);
       setIsAuthenticated(true);
     } else {
-      alert('Senha incorreta! Use "admin2026" para Comissão ou "lider2026" para Líderes.');
+      alert('Senha incorreta para a equipe selecionada!');
     }
   };
 
+  // Salvar edições de Equipe
   const handleSaveTeamEdit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingTeam || userRole !== 'ADMIN' || isSaving) return;
 
-    try {
-      setIsSaving(true);
-      const { error } = await supabase
-        .from('teams')
-        .update({
-          name: editingTeam.name,
-          color_hex: editingTeam.color_hex,
-          teacher_in_charge: editingTeam.teacher_in_charge,
-        })
-        .eq('id', editingTeam.id);
+    setIsSaving(true);
+    const { error } = await supabase.from('teams').update({
+      name: editingTeam.name,
+      color_hex: editingTeam.color_hex,
+      teacher_in_charge: editingTeam.teacher_in_charge,
+    }).eq('id', editingTeam.id);
 
-      if (error) {
-        alert('ERRO DO SUPABASE: ' + error.message);
-      } else {
-        alert('Sucesso! Dados salvos no banco de dados.');
-        setEditTeamModalOpen(false);
-        setEditingTeam(null);
-        await fetchTeams();
-      }
-    } catch (err: any) {
-      alert('Erro inesperado ao salvar: ' + (err.message || err));
-    } finally {
-      setIsSaving(false);
+    if (error) alert('Erro: ' + error.message);
+    else {
+      alert('Equipe atualizada!');
+      setEditTeamModalOpen(false);
+      fetchTeams();
     }
+    setIsSaving(false);
   };
 
+  // Lançar Pontos
   const handleScoreAdjustment = async (e: React.FormEvent) => {
     e.preventDefault();
     if (userRole !== 'ADMIN' || isSaving) return;
@@ -176,29 +160,81 @@ export default function App() {
     const team = teams.find(t => t.id === targetTeamId);
     if (!team || pointsDelta === 0) return;
 
-    try {
-      setIsSaving(true);
-      const newScore = team.total_score + pointsDelta;
+    setIsSaving(true);
+    const newScore = team.total_score + pointsDelta;
+    const { error } = await supabase.from('teams').update({ total_score: newScore }).eq('id', team.id);
 
-      const { error } = await supabase
-        .from('teams')
-        .update({ total_score: newScore })
-        .eq('id', team.id);
+    if (error) alert('Erro ao lançar pontos: ' + error.message);
+    else {
+      alert('Pontuação atualizada!');
+      setScoreModalOpen(false);
+      setPointsDelta(0);
+      fetchTeams();
+    }
+    setIsSaving(false);
+  };
 
-      if (error) {
-        alert('ERRO DO SUPABASE AO ATUALIZAR PONTOS: ' + error.message);
-      } else {
-        alert('Pontuação atualizada com sucesso!');
-        setScoreModalOpen(false);
-        setPointsDelta(0);
-        await fetchTeams();
-      }
-    } catch (err: any) {
-      alert('Erro ao atualizar pontuação: ' + (err.message || err));
-    } finally {
-      setIsSaving(false);
+  // Criar Evento (Apenas ADMIN)
+  const handleCreateEvent = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (userRole !== 'ADMIN' || isSaving) return;
+
+    setIsSaving(true);
+    const { error } = await supabase.from('events').insert([{ ...newEvent, status: 'PENDENTE' }]);
+
+    if (error) alert('Erro ao criar evento: ' + error.message);
+    else {
+      alert('Novo evento cadastrado!');
+      setNewEventModalOpen(false);
+      setNewEvent({ title: '', date: '', time: '', location: '', points: 100, description: '' });
+      fetchEvents();
+    }
+    setIsSaving(false);
+  };
+
+  // Trocar Senha da Equipe (Para o Líder)
+  const handleChangePassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedTeamId || !newPasswordInput || isSaving) return;
+
+    setIsSaving(true);
+    const { error } = await supabase.from('team_passwords').upsert({
+      team_id: selectedTeamId,
+      password: newPasswordInput,
+      updated_at: new Date().toISOString()
+    });
+
+    if (error) alert('Erro ao alterar senha: ' + error.message);
+    else {
+      alert('Senha alterada com sucesso!');
+      setChangePasswordModalOpen(false);
+      setNewPasswordInput('');
+      fetchPasswords();
+    }
+    setIsSaving(false);
+  };
+
+  // Resetar Senha da Equipe para 'lider2026' (Apenas ADMIN)
+  const handleResetPassword = async (teamId: string) => {
+    if (userRole !== 'ADMIN') return;
+    if (!confirm('Deseja resetar a senha desta equipe para "lider2026"?')) return;
+
+    const { error } = await supabase.from('team_passwords').upsert({
+      team_id: teamId,
+      password: 'lider2026',
+      updated_at: new Date().toISOString()
+    });
+
+    if (error) alert('Erro ao resetar senha: ' + error.message);
+    else {
+      alert('Senha resetada para "lider2026"!');
+      fetchPasswords();
     }
   };
+
+  // Próximo Evento Pendente
+  const nextEvent = eventsList.find(e => e.status !== 'CONCLUIDO');
+  const loggedTeam = teams.find(t => t.id === selectedTeamId);
 
   if (!isAuthenticated) {
     return (
@@ -252,7 +288,7 @@ export default function App() {
 
           <div className="mt-6 p-3 bg-slate-50 rounded-lg border border-slate-200 text-[11px] text-slate-500">
             <p><strong>Senha Comissão (Admin):</strong> <code>admin2026</code></p>
-            <p><strong>Senha Líder:</strong> <code>lider2026</code></p>
+            <p><strong>Senha Padrão Líder:</strong> <code>lider2026</code></p>
           </div>
         </div>
       </div>
@@ -275,7 +311,7 @@ export default function App() {
 
           <div className="flex items-center gap-3">
             <span className="text-xs px-2.5 py-1 rounded-full font-bold bg-slate-800 text-amber-400 border border-slate-700">
-              {userRole === 'ADMIN' ? 'Comissão Organizadora' : `Líder`}
+              {userRole === 'ADMIN' ? 'Comissão Organizadora' : `Líder - ${loggedTeam?.name || ''}`}
             </span>
             <button 
               onClick={() => setIsAuthenticated(false)}
@@ -289,29 +325,66 @@ export default function App() {
       </header>
 
       <div className="max-w-7xl mx-auto px-4 mt-6">
-        <div className="flex border-b border-slate-200 gap-4 mb-6">
+        
+        {/* DESTAQUE: PRÓXIMO EVENTO NO TOPO */}
+        {nextEvent && (
+          <div className="bg-slate-900 text-white rounded-2xl p-5 mb-6 shadow-xl border border-slate-800 relative overflow-hidden flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+            <div>
+              <span className="text-[10px] font-black tracking-widest text-amber-400 uppercase bg-amber-400/10 px-2.5 py-1 rounded-md border border-amber-400/20">
+                Próximo Evento Em Destaque
+              </span>
+              <h2 className="text-xl font-black mt-2">{nextEvent.title}</h2>
+              <p className="text-xs text-slate-300 mt-1">{nextEvent.description}</p>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-3 text-xs bg-slate-800/80 p-3 rounded-xl border border-slate-700/50">
+              <span className="flex items-center gap-1 font-semibold text-amber-400">
+                <Calendar className="w-4 h-4" /> {nextEvent.date}
+              </span>
+              <span className="flex items-center gap-1 font-semibold text-slate-300">
+                <Clock className="w-4 h-4 text-slate-400" /> {nextEvent.time}
+              </span>
+              <span className="flex items-center gap-1 font-semibold text-slate-300">
+                <MapPin className="w-4 h-4 text-slate-400" /> {nextEvent.location}
+              </span>
+              <span className="font-black bg-amber-500 text-slate-950 px-2.5 py-1 rounded-lg">
+                +{nextEvent.points} pts
+              </span>
+            </div>
+          </div>
+        )}
+
+        <div className="flex border-b border-slate-200 gap-4 mb-6 overflow-x-auto">
           <button 
             onClick={() => setActiveTab('dashboard')} 
-            className={`pb-3 font-semibold text-sm flex items-center gap-2 border-b-2 ${activeTab === 'dashboard' ? 'border-amber-500 text-amber-600' : 'border-transparent text-slate-500'}`}
+            className={`pb-3 font-semibold text-sm flex items-center gap-2 border-b-2 whitespace-nowrap ${activeTab === 'dashboard' ? 'border-amber-500 text-amber-600' : 'border-transparent text-slate-500'}`}
           >
             <BarChart3 className="w-4 h-4" /> Painel Principal
           </button>
           
           <button 
             onClick={() => setActiveTab('equipe')} 
-            className={`pb-3 font-semibold text-sm flex items-center gap-2 border-b-2 ${activeTab === 'equipe' ? 'border-amber-500 text-amber-600' : 'border-transparent text-slate-500'}`}
+            className={`pb-3 font-semibold text-sm flex items-center gap-2 border-b-2 whitespace-nowrap ${activeTab === 'equipe' ? 'border-amber-500 text-amber-600' : 'border-transparent text-slate-500'}`}
           >
             <Users className="w-4 h-4" /> Equipes
           </button>
 
           <button 
             onClick={() => setActiveTab('eventos')} 
-            className={`pb-3 font-semibold text-sm flex items-center gap-2 border-b-2 ${activeTab === 'eventos' ? 'border-amber-500 text-amber-600' : 'border-transparent text-slate-500'}`}
+            className={`pb-3 font-semibold text-sm flex items-center gap-2 border-b-2 whitespace-nowrap ${activeTab === 'eventos' ? 'border-amber-500 text-amber-600' : 'border-transparent text-slate-500'}`}
           >
-            <Calendar className="w-4 h-4" /> Cronograma de Eventos
+            <Calendar className="w-4 h-4" /> Eventos & Provas
+          </button>
+
+          <button 
+            onClick={() => setActiveTab('seguranca')} 
+            className={`pb-3 font-semibold text-sm flex items-center gap-2 border-b-2 whitespace-nowrap ${activeTab === 'seguranca' ? 'border-amber-500 text-amber-600' : 'border-transparent text-slate-500'}`}
+          >
+            <Key className="w-4 h-4" /> Seguranca & Senhas
           </button>
         </div>
 
+        {/* TAB 1: DASHBOARD */}
         {activeTab === 'dashboard' && (
           <div className="space-y-6">
             {userRole === 'ADMIN' && (
@@ -320,7 +393,7 @@ export default function App() {
                   <h3 className="font-bold text-amber-900 text-sm flex items-center gap-2">
                     <ShieldAlert className="w-4 h-4 text-amber-600" /> Painel da Comissão
                   </h3>
-                  <p className="text-xs text-amber-700">Lançamento de pontos com salvamento automático no Supabase.</p>
+                  <p className="text-xs text-amber-700">Lançamento rápido de pontos para o ranking geral.</p>
                 </div>
                 <button 
                   onClick={() => setScoreModalOpen(true)}
@@ -331,40 +404,33 @@ export default function App() {
               </div>
             )}
 
-            {loading ? (
-              <p className="text-xs text-slate-500 italic">Carregando informações do banco de dados...</p>
-            ) : teams.length === 0 ? (
-              <div className="p-6 bg-white border border-red-200 text-red-700 rounded-xl text-xs font-semibold">
-                Nenhuma equipe foi encontrada no Supabase.
-              </div>
-            ) : (
-              <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                {teams.map((team, index) => (
-                  <div 
-                    key={team.id} 
-                    className="bg-white rounded-xl p-5 border border-slate-200 shadow-sm relative overflow-hidden flex flex-col justify-between"
-                    style={{ borderTop: `6px solid ${team.color_hex}` }}
-                  >
-                    <div>
-                      <span className="text-[10px] font-black uppercase text-slate-400">
-                        {index + 1}º LUGAR
-                      </span>
-                      <h4 className="text-lg font-extrabold" style={{ color: team.color_hex }}>
-                        {team.name}
-                      </h4>
-                    </div>
-
-                    <div className="mt-4">
-                      <div className="text-3xl font-black text-slate-900">{team.total_score} <span className="text-xs font-normal text-slate-500">pts</span></div>
-                      <p className="text-[11px] text-slate-500 mt-1">Prof: <strong>{team.teacher_in_charge}</strong></p>
-                    </div>
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+              {teams.map((team, index) => (
+                <div 
+                  key={team.id} 
+                  className="bg-white rounded-xl p-5 border border-slate-200 shadow-sm relative overflow-hidden flex flex-col justify-between"
+                  style={{ borderTop: `6px solid ${team.color_hex}` }}
+                >
+                  <div>
+                    <span className="text-[10px] font-black uppercase text-slate-400">
+                      {index + 1}º LUGAR
+                    </span>
+                    <h4 className="text-lg font-extrabold" style={{ color: team.color_hex }}>
+                      {team.name}
+                    </h4>
                   </div>
-                ))}
-              </div>
-            )}
+
+                  <div className="mt-4">
+                    <div className="text-3xl font-black text-slate-900">{team.total_score} <span className="text-xs font-normal text-slate-500">pts</span></div>
+                    <p className="text-[11px] text-slate-500 mt-1">Prof: <strong>{team.teacher_in_charge}</strong></p>
+                  </div>
+                </div>
+              ))}
+            </div>
           </div>
         )}
 
+        {/* TAB 2: EQUIPES */}
         {activeTab === 'equipe' && (
           <div className="space-y-4">
             {teams.map(team => (
@@ -384,7 +450,7 @@ export default function App() {
                     }}
                     className="flex items-center gap-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 px-3 py-1.5 rounded-lg text-xs font-bold transition border border-slate-200"
                   >
-                    <Edit3 className="w-3.5 h-3.5" /> Editar no Supabase
+                    <Edit3 className="w-3.5 h-3.5" /> Editar Equipe
                   </button>
                 )}
               </div>
@@ -392,13 +458,25 @@ export default function App() {
           </div>
         )}
 
+        {/* TAB 3: EVENTOS (SÓ ADMIN PODE ADICIONAR) */}
         {activeTab === 'eventos' && (
           <div className="space-y-4">
-            <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
-              <h2 className="text-base font-bold text-slate-900 flex items-center gap-2">
-                <Calendar className="w-5 h-5 text-amber-500" /> Programação de Provas e Eventos
-              </h2>
-              <p className="text-xs text-slate-500 mt-1">Confira as datas, horários e locais das provas da Gincana Escolar 2026.</p>
+            <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex justify-between items-center">
+              <div>
+                <h2 className="text-base font-bold text-slate-900 flex items-center gap-2">
+                  <Calendar className="w-5 h-5 text-amber-500" /> Cronograma de Eventos
+                </h2>
+                <p className="text-xs text-slate-500 mt-1">Provas e atividades agendadas para a Gincana 2026.</p>
+              </div>
+
+              {userRole === 'ADMIN' && (
+                <button 
+                  onClick={() => setNewEventModalOpen(true)}
+                  className="bg-slate-900 hover:bg-slate-800 text-amber-400 px-3.5 py-2 rounded-lg font-bold text-xs flex items-center gap-1.5 shadow"
+                >
+                  <Plus className="w-4 h-4" /> Novo Evento
+                </button>
+              )}
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -407,7 +485,7 @@ export default function App() {
                   <div>
                     <div className="flex justify-between items-start mb-2">
                       <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-100 text-amber-800">
-                        {ev.points} Pontos em Disputa
+                        +{ev.points} Pontos
                       </span>
                       <span className="text-[11px] font-semibold text-slate-500 flex items-center gap-1">
                         <Clock className="w-3.5 h-3.5 text-slate-400" /> {ev.time}
@@ -429,13 +507,57 @@ export default function App() {
             </div>
           </div>
         )}
+
+        {/* TAB 4: SEGURANÇA E SENHAS */}
+        {activeTab === 'seguranca' && (
+          <div className="space-y-6">
+            {userRole === 'LIDER' && (
+              <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm max-w-md">
+                <h3 className="font-bold text-slate-900 text-sm mb-1 flex items-center gap-2">
+                  <Key className="w-4 h-4 text-amber-600" /> Alterar Minha Senha
+                </h3>
+                <p className="text-xs text-slate-500 mb-4">A nova senha será exigida no próximo login da equipe.</p>
+                
+                <button 
+                  onClick={() => setChangePasswordModalOpen(true)}
+                  className="bg-amber-600 hover:bg-amber-700 text-white px-4 py-2 rounded-lg text-xs font-bold"
+                >
+                  Criar Nova Senha
+                </button>
+              </div>
+            )}
+
+            {userRole === 'ADMIN' && (
+              <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
+                <h3 className="font-bold text-slate-900 text-sm mb-1 flex items-center gap-2">
+                  <ShieldAlert className="w-4 h-4 text-amber-600" /> Painel de Gestão de Senhas (Comissão)
+                </h3>
+                <p className="text-xs text-slate-500 mb-4">Caso uma equipe perca a senha, clique em resetar para restaurar para "lider2026".</p>
+
+                <div className="space-y-2">
+                  {teams.map(t => (
+                    <div key={t.id} className="flex justify-between items-center p-3 bg-slate-50 rounded-lg border border-slate-200 text-xs font-medium">
+                      <span className="font-bold text-slate-800" style={{ color: t.color_hex }}>{t.name}</span>
+                      <button 
+                        onClick={() => handleResetPassword(t.id)}
+                        className="bg-slate-200 hover:bg-slate-300 text-slate-800 px-3 py-1.5 rounded flex items-center gap-1 text-[11px] font-bold"
+                      >
+                        <RefreshCw className="w-3 h-3" /> Resetar Senha
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
-      {/* Modal Editar Equipe */}
+      {/* MODAL: EDITAR EQUIPE */}
       {editTeamModalOpen && editingTeam && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-50">
           <div className="bg-white rounded-xl max-w-md w-full p-6 shadow-2xl">
-            <h3 className="text-base font-bold text-slate-900 mb-3">Editar Equipe no Supabase</h3>
+            <h3 className="text-base font-bold text-slate-900 mb-3">Editar Equipe</h3>
             <form onSubmit={handleSaveTeamEdit} className="space-y-3">
               <div>
                 <label className="block text-xs font-bold text-slate-700 mb-1">Nome da Equipe</label>
@@ -444,7 +566,6 @@ export default function App() {
                   value={editingTeam.name}
                   onChange={(e) => setEditingTeam({ ...editingTeam, name: e.target.value })}
                   className="w-full text-xs p-2 border border-slate-300 rounded-lg font-bold"
-                  style={{ color: editingTeam.color_hex }}
                   required
                 />
               </div>
@@ -461,98 +582,164 @@ export default function App() {
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">Cor da Equipe</label>
-                <div className="flex gap-2 items-center">
-                  <input 
-                    type="color" 
-                    value={editingTeam.color_hex}
-                    onChange={(e) => setEditingTeam({ ...editingTeam, color_hex: e.target.value })}
-                    className="w-12 h-9 p-0.5 border border-slate-300 rounded cursor-pointer"
-                  />
-                  <input 
-                    type="text" 
-                    value={editingTeam.color_hex}
-                    onChange={(e) => setEditingTeam({ ...editingTeam, color_hex: e.target.value })}
-                    className="w-full text-xs p-2 border border-slate-300 rounded-lg font-mono uppercase"
-                    required
-                  />
-                </div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">Cor Hexadecimal</label>
+                <input 
+                  type="color" 
+                  value={editingTeam.color_hex}
+                  onChange={(e) => setEditingTeam({ ...editingTeam, color_hex: e.target.value })}
+                  className="w-full h-9 p-0.5 border border-slate-300 rounded cursor-pointer mb-1"
+                />
               </div>
 
               <div className="flex justify-end gap-2 pt-2">
-                <button 
-                  type="button" 
-                  onClick={() => setEditTeamModalOpen(false)}
-                  disabled={isSaving}
-                  className="px-3 py-1.5 border border-slate-300 rounded-lg text-xs font-bold disabled:opacity-50"
-                >
-                  Cancelar
-                </button>
-                <button 
-                  type="submit"
-                  disabled={isSaving}
-                  className="px-3 py-1.5 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-xs font-bold disabled:opacity-50"
-                >
-                  {isSaving ? 'Salvando...' : 'Salvar no Supabase'}
-                </button>
+                <button type="button" onClick={() => setEditTeamModalOpen(false)} className="px-3 py-1.5 border border-slate-300 rounded-lg text-xs font-bold">Cancelar</button>
+                <button type="submit" disabled={isSaving} className="px-3 py-1.5 bg-amber-600 text-white rounded-lg text-xs font-bold">{isSaving ? 'Salvando...' : 'Salvar'}</button>
               </div>
             </form>
           </div>
         </div>
       )}
 
-      {/* Modal Lançar Pontos */}
-      {scoreModalOpen && (
+      {/* MODAL: ADICIONAR EVENTO */}
+      {newEventModalOpen && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-50">
           <div className="bg-white rounded-xl max-w-md w-full p-6 shadow-2xl">
-            <h3 className="text-base font-bold text-slate-900 mb-3">Lançar / Retirar Pontos</h3>
-            <form onSubmit={handleScoreAdjustment} className="space-y-3">
+            <h3 className="text-base font-bold text-slate-900 mb-3">Novo Evento / Prova</h3>
+            <form onSubmit={handleCreateEvent} className="space-y-3">
               <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">Equipe</label>
-                <select 
-                  value={targetTeamId}
-                  onChange={(e) => setTargetTeamId(e.target.value)}
+                <label className="block text-xs font-bold text-slate-700 mb-1">Título do Evento</label>
+                <input 
+                  type="text" 
+                  value={newEvent.title}
+                  onChange={(e) => setNewEvent({ ...newEvent, title: e.target.value })}
+                  placeholder="Ex: Torneio de Queimada"
                   className="w-full text-xs p-2 border border-slate-300 rounded-lg"
-                >
-                  {teams.map(t => (
-                    <option key={t.id} value={t.id}>{t.name}</option>
-                  ))}
-                </select>
+                  required
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">Data</label>
+                  <input 
+                    type="date" 
+                    value={newEvent.date}
+                    onChange={(e) => setNewEvent({ ...newEvent, date: e.target.value })}
+                    className="w-full text-xs p-2 border border-slate-300 rounded-lg"
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">Horário</label>
+                  <input 
+                    type="text" 
+                    value={newEvent.time}
+                    onChange={(e) => setNewEvent({ ...newEvent, time: e.target.value })}
+                    placeholder="Ex: 09:30"
+                    className="w-full text-xs p-2 border border-slate-300 rounded-lg"
+                    required
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">Local</label>
+                  <input 
+                    type="text" 
+                    value={newEvent.location}
+                    onChange={(e) => setNewEvent({ ...newEvent, location: e.target.value })}
+                    placeholder="Ex: Quadra 2"
+                    className="w-full text-xs p-2 border border-slate-300 rounded-lg"
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">Pontos Em Disputa</label>
+                  <input 
+                    type="number" 
+                    value={newEvent.points}
+                    onChange={(e) => setNewEvent({ ...newEvent, points: Number(e.target.value) })}
+                    className="w-full text-xs p-2 border border-slate-300 rounded-lg"
+                    required
+                  />
+                </div>
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">Quantidade de Pontos</label>
-                <input 
-                  type="number" 
-                  value={pointsDelta}
-                  onChange={(e) => setPointsDelta(Number(e.target.value))}
-                  placeholder="Ex: 50 ou -10"
+                <label className="block text-xs font-bold text-slate-700 mb-1">Descrição / Regras</label>
+                <textarea 
+                  value={newEvent.description}
+                  onChange={(e) => setNewEvent({ ...newEvent, description: e.target.value })}
+                  rows={2}
                   className="w-full text-xs p-2 border border-slate-300 rounded-lg"
                   required
                 />
               </div>
 
               <div className="flex justify-end gap-2 pt-2">
-                <button 
-                  type="button" 
-                  onClick={() => setScoreModalOpen(false)}
-                  disabled={isSaving}
-                  className="px-3 py-1.5 border border-slate-300 rounded-lg text-xs font-bold disabled:opacity-50"
-                >
-                  Cancelar
-                </button>
-                <button 
-                  type="submit"
-                  disabled={isSaving}
-                  className="px-3 py-1.5 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-xs font-bold disabled:opacity-50"
-                >
-                  {isSaving ? 'Salvando...' : 'Confirmar e Salvar'}
-                </button>
+                <button type="button" onClick={() => setNewEventModalOpen(false)} className="px-3 py-1.5 border border-slate-300 rounded-lg text-xs font-bold">Cancelar</button>
+                <button type="submit" disabled={isSaving} className="px-3 py-1.5 bg-amber-600 text-white rounded-lg text-xs font-bold">{isSaving ? 'Cadastrando...' : 'Cadastrar'}</button>
               </div>
             </form>
           </div>
         </div>
       )}
+
+      {/* MODAL: LANÇAR PONTOS */}
+      {scoreModalOpen && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-xl max-w-md w-full p-6 shadow-2xl">
+            <h3 className="text-base font-bold text-slate-900 mb-3">Lançar Pontos</h3>
+            <form onSubmit={handleScoreAdjustment} className="space-y-3">
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">Equipe</label>
+                <select value={targetTeamId} onChange={(e) => setTargetTeamId(e.target.value)} className="w-full text-xs p-2 border border-slate-300 rounded-lg">
+                  {teams.map(t => (<option key={t.id} value={t.id}>{t.name}</option>))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">Quantidade</label>
+                <input type="number" value={pointsDelta} onChange={(e) => setPointsDelta(Number(e.target.value))} placeholder="Ex: 50 ou -10" className="w-full text-xs p-2 border border-slate-300 rounded-lg" required />
+              </div>
+
+              <div className="flex justify-end gap-2 pt-2">
+                <button type="button" onClick={() => setScoreModalOpen(false)} className="px-3 py-1.5 border border-slate-300 rounded-lg text-xs font-bold">Cancelar</button>
+                <button type="submit" disabled={isSaving} className="px-3 py-1.5 bg-amber-600 text-white rounded-lg text-xs font-bold">{isSaving ? 'Salvando...' : 'Confirmar'}</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: TROCAR SENHA DO LÍDER */}
+      {changePasswordModalOpen && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-xl max-w-md w-full p-6 shadow-2xl">
+            <h3 className="text-base font-bold text-slate-900 mb-3">Alterar Senha de Acesso</h3>
+            <form onSubmit={handleChangePassword} className="space-y-3">
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">Nova Senha</label>
+                <input 
+                  type="password" 
+                  value={newPasswordInput}
+                  onChange={(e) => setNewPasswordInput(e.target.value)}
+                  placeholder="Digite a nova senha da equipe"
+                  className="w-full text-xs p-2 border border-slate-300 rounded-lg"
+                  required
+                />
+              </div>
+
+              <div className="flex justify-end gap-2 pt-2">
+                <button type="button" onClick={() => setChangePasswordModalOpen(false)} className="px-3 py-1.5 border border-slate-300 rounded-lg text-xs font-bold">Cancelar</button>
+                <button type="submit" disabled={isSaving} className="px-3 py-1.5 bg-amber-600 text-white rounded-lg text-xs font-bold">{isSaving ? 'Salvando...' : 'Salvar Nova Senha'}</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
     </div>
   );
 }
