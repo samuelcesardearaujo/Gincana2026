@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { 
   Trophy, ShieldAlert, Users, Plus, 
-  BarChart3, LogOut, Edit3, Calendar, MapPin, Clock, Key, RefreshCw
+  BarChart3, LogOut, Edit3, Calendar, MapPin, Clock, Key, RefreshCw, UserPlus, Trash2, GraduationCap
 } from 'lucide-react';
 import { supabase } from './supabaseClient';
 
@@ -12,7 +12,17 @@ export interface Team {
   name: string;
   color_hex: string;
   teacher_in_charge: string;
+  classroom: string;
+  leader_name: string;
+  vice_leader_name: string;
   total_score: number;
+}
+
+export interface Participant {
+  id: string;
+  team_id: string;
+  student_name: string;
+  grade_class: string;
 }
 
 export interface EventItem {
@@ -42,10 +52,11 @@ export default function App() {
   const [teams, setTeams] = useState<Team[]>([]);
   const [eventsList, setEventsList] = useState<EventItem[]>([]);
   const [passwordsList, setPasswordsList] = useState<TeamPassword[]>([]);
+  const [participantsList, setParticipantsList] = useState<Participant[]>([]);
   
   const [loading, setLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'equipe' | 'eventos' | 'seguranca'>('dashboard');
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'equipe' | 'participantes' | 'eventos' | 'seguranca'>('dashboard');
 
   // Modais
   const [editTeamModalOpen, setEditTeamModalOpen] = useState(false);
@@ -56,27 +67,24 @@ export default function App() {
   const [pointsDelta, setPointsDelta] = useState<number>(0);
 
   const [newEventModalOpen, setNewEventModalOpen] = useState(false);
-  const [newEvent, setNewEvent] = useState({
-    title: '',
-    date: '',
-    time: '',
-    location: '',
-    points: 100,
-    description: ''
-  });
+  const [newEvent, setNewEvent] = useState({ title: '', date: '', time: '', location: '', points: 100, description: '' });
 
   const [changePasswordModalOpen, setChangePasswordModalOpen] = useState(false);
   const [newPasswordInput, setNewPasswordInput] = useState('');
 
+  // Formulário de Novo Participante
+  const [newStudentName, setNewStudentName] = useState('');
+  const [newStudentGrade, setNewStudentGrade] = useState('');
+
   useEffect(() => {
     fetchAllData();
 
-    // Inscrição Realtime no Supabase
     const channel = supabase
       .channel('schema-changes')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'teams' }, () => fetchTeams())
       .on('postgres_changes', { event: '*', schema: 'public', table: 'events' }, () => fetchEvents())
       .on('postgres_changes', { event: '*', schema: 'public', table: 'team_passwords' }, () => fetchPasswords())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'participants' }, () => fetchParticipants())
       .subscribe();
 
     return () => {
@@ -86,7 +94,7 @@ export default function App() {
 
   const fetchAllData = async () => {
     setLoading(true);
-    await Promise.all([fetchTeams(), fetchEvents(), fetchPasswords()]);
+    await Promise.all([fetchTeams(), fetchEvents(), fetchPasswords(), fetchParticipants()]);
     setLoading(false);
   };
 
@@ -111,6 +119,11 @@ export default function App() {
     if (data) setPasswordsList(data);
   };
 
+  const fetchParticipants = async () => {
+    const { data } = await supabase.from('participants').select('*').order('student_name', { ascending: true });
+    if (data) setParticipantsList(data);
+  };
+
   const handleLogin = (e: React.FormEvent) => {
     e.preventDefault();
     if (loginPassword === 'admin2026') {
@@ -131,7 +144,7 @@ export default function App() {
     }
   };
 
-  // Salvar edições de Equipe
+  // Salvar edições da Equipe (incluindo Sala, Líder e Vice)
   const handleSaveTeamEdit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingTeam || userRole !== 'ADMIN' || isSaving) return;
@@ -141,6 +154,9 @@ export default function App() {
       name: editingTeam.name,
       color_hex: editingTeam.color_hex,
       teacher_in_charge: editingTeam.teacher_in_charge,
+      classroom: editingTeam.classroom,
+      leader_name: editingTeam.leader_name,
+      vice_leader_name: editingTeam.vice_leader_name,
     }).eq('id', editingTeam.id);
 
     if (error) alert('Erro: ' + error.message);
@@ -150,6 +166,38 @@ export default function App() {
       fetchTeams();
     }
     setIsSaving(false);
+  };
+
+  // Adicionar Participante/Aluno
+  const handleAddParticipant = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedTeamId && userRole !== 'ADMIN') return;
+    const targetTeam = userRole === 'ADMIN' ? targetTeamId : selectedTeamId;
+
+    if (!newStudentName || !newStudentGrade || isSaving) return;
+
+    setIsSaving(true);
+    const { error } = await supabase.from('participants').insert([{
+      team_id: targetTeam,
+      student_name: newStudentName,
+      grade_class: newStudentGrade
+    }]);
+
+    if (error) alert('Erro ao adicionar integrante: ' + error.message);
+    else {
+      setNewStudentName('');
+      setNewStudentGrade('');
+      fetchParticipants();
+    }
+    setIsSaving(false);
+  };
+
+  // Remover Participante
+  const handleDeleteParticipant = async (id: string) => {
+    if (!confirm('Deseja remover este integrante da equipe?')) return;
+    const { error } = await supabase.from('participants').delete().eq('id', id);
+    if (error) alert('Erro ao remover: ' + error.message);
+    else fetchParticipants();
   };
 
   // Lançar Pontos
@@ -174,7 +222,7 @@ export default function App() {
     setIsSaving(false);
   };
 
-  // Criar Evento (Apenas ADMIN)
+  // Criar Evento
   const handleCreateEvent = async (e: React.FormEvent) => {
     e.preventDefault();
     if (userRole !== 'ADMIN' || isSaving) return;
@@ -192,7 +240,7 @@ export default function App() {
     setIsSaving(false);
   };
 
-  // Trocar Senha da Equipe (Para o Líder)
+  // Trocar Senha
   const handleChangePassword = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedTeamId || !newPasswordInput || isSaving) return;
@@ -214,7 +262,7 @@ export default function App() {
     setIsSaving(false);
   };
 
-  // Resetar Senha da Equipe para 'lider2026' (Apenas ADMIN)
+  // Resetar Senha
   const handleResetPassword = async (teamId: string) => {
     if (userRole !== 'ADMIN') return;
     if (!confirm('Deseja resetar a senha desta equipe para "lider2026"?')) return;
@@ -232,9 +280,13 @@ export default function App() {
     }
   };
 
-  // Próximo Evento Pendente
   const nextEvent = eventsList.find(e => e.status !== 'CONCLUIDO');
   const loggedTeam = teams.find(t => t.id === selectedTeamId);
+
+  // Filtrar participantes para o Líder da equipe ou todos para o Admin
+  const visibleParticipants = userRole === 'ADMIN' 
+    ? participantsList.filter(p => p.team_id === targetTeamId)
+    : participantsList.filter(p => p.team_id === selectedTeamId);
 
   if (!isAuthenticated) {
     return (
@@ -370,6 +422,13 @@ export default function App() {
           </button>
 
           <button 
+            onClick={() => setActiveTab('participantes')} 
+            className={`pb-3 font-semibold text-sm flex items-center gap-2 border-b-2 whitespace-nowrap ${activeTab === 'participantes' ? 'border-amber-500 text-amber-600' : 'border-transparent text-slate-500'}`}
+          >
+            <GraduationCap className="w-4 h-4" /> Alunos / Participantes
+          </button>
+
+          <button 
             onClick={() => setActiveTab('eventos')} 
             className={`pb-3 font-semibold text-sm flex items-center gap-2 border-b-2 whitespace-nowrap ${activeTab === 'eventos' ? 'border-amber-500 text-amber-600' : 'border-transparent text-slate-500'}`}
           >
@@ -420,9 +479,10 @@ export default function App() {
                     </h4>
                   </div>
 
-                  <div className="mt-4">
+                  <div className="mt-4 space-y-1 border-t border-slate-100 pt-3">
                     <div className="text-3xl font-black text-slate-900">{team.total_score} <span className="text-xs font-normal text-slate-500">pts</span></div>
-                    <p className="text-[11px] text-slate-500 mt-1">Prof: <strong>{team.teacher_in_charge}</strong></p>
+                    <p className="text-[11px] text-slate-600">Prof: <strong>{team.teacher_in_charge || 'Não informado'}</strong></p>
+                    <p className="text-[11px] text-slate-500">Sala: <strong>{team.classroom || 'Não informada'}</strong></p>
                   </div>
                 </div>
               ))}
@@ -434,12 +494,17 @@ export default function App() {
         {activeTab === 'equipe' && (
           <div className="space-y-4">
             {teams.map(team => (
-              <div key={team.id} className="bg-white rounded-xl border border-slate-200 p-6 shadow-sm flex justify-between items-center">
+              <div key={team.id} className="bg-white rounded-xl border border-slate-200 p-6 shadow-sm flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
                 <div>
                   <h2 className="text-2xl font-black" style={{ color: team.color_hex }}>
                     {team.name}
                   </h2>
-                  <p className="text-xs text-slate-500 mt-1">Professor Responsável: <strong>{team.teacher_in_charge}</strong></p>
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-x-6 gap-y-1 text-xs text-slate-600 mt-2">
+                    <p>Prof. Responsável: <strong>{team.teacher_in_charge || 'N/A'}</strong></p>
+                    <p>Sala: <strong>{team.classroom || 'N/A'}</strong></p>
+                    <p>Líder: <strong>{team.leader_name || 'N/A'}</strong></p>
+                    <p>Vice-Líder: <strong>{team.vice_leader_name || 'N/A'}</strong></p>
+                  </div>
                 </div>
 
                 {userRole === 'ADMIN' && (
@@ -458,7 +523,102 @@ export default function App() {
           </div>
         )}
 
-        {/* TAB 3: EVENTOS (SÓ ADMIN PODE ADICIONAR) */}
+        {/* TAB 3: ALUNOS / PARTICIPANTES */}
+        {activeTab === 'participantes' && (
+          <div className="space-y-6">
+            <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
+              <h2 className="text-base font-bold text-slate-900 mb-1 flex items-center gap-2">
+                <GraduationCap className="w-5 h-5 text-amber-500" /> Cadastro de Alunos da Equipe
+              </h2>
+              <p className="text-xs text-slate-500 mb-4">
+                {userRole === 'ADMIN' ? 'Selecione uma equipe para visualizar ou cadastrar os integrantes.' : `Cadastre os participantes da sua equipe (${loggedTeam?.name}).`}
+              </p>
+
+              {userRole === 'ADMIN' && (
+                <div className="mb-4">
+                  <label className="block text-xs font-bold text-slate-700 mb-1">Selecione a Equipe</label>
+                  <select 
+                    value={targetTeamId} 
+                    onChange={(e) => setTargetTeamId(e.target.value)} 
+                    className="w-full md:w-64 text-xs p-2.5 border border-slate-300 rounded-lg bg-slate-50 font-bold"
+                  >
+                    {teams.map(t => (<option key={t.id} value={t.id}>{t.name}</option>))}
+                  </select>
+                </div>
+              )}
+
+              {/* Formulário de Adicionar Aluno */}
+              <form onSubmit={handleAddParticipant} className="flex flex-col md:flex-row gap-3 bg-slate-50 p-4 rounded-xl border border-slate-200">
+                <div className="flex-1">
+                  <input 
+                    type="text" 
+                    value={newStudentName}
+                    onChange={(e) => setNewStudentName(e.target.value)}
+                    placeholder="Nome completo do aluno"
+                    className="w-full text-xs p-2.5 border border-slate-300 rounded-lg"
+                    required
+                  />
+                </div>
+                <div className="w-full md:w-48">
+                  <input 
+                    type="text" 
+                    value={newStudentGrade}
+                    onChange={(e) => setNewStudentGrade(e.target.value)}
+                    placeholder="Turma (Ex: 6º Ano A)"
+                    className="w-full text-xs p-2.5 border border-slate-300 rounded-lg"
+                    required
+                  />
+                </div>
+                <button 
+                  type="submit" 
+                  disabled={isSaving}
+                  className="bg-amber-600 hover:bg-amber-700 text-white px-4 py-2.5 rounded-lg font-bold text-xs flex items-center justify-center gap-1.5 shadow"
+                >
+                  <UserPlus className="w-4 h-4" /> Cadastrar Aluno
+                </button>
+              </form>
+            </div>
+
+            {/* Lista de Alunos Cadastrados */}
+            <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+              <div className="p-4 bg-slate-900 text-white font-bold text-xs flex justify-between">
+                <span>Lista de Alunos Integrantes ({visibleParticipants.length})</span>
+              </div>
+
+              {visibleParticipants.length === 0 ? (
+                <div className="p-6 text-center text-xs text-slate-500 italic">
+                  Nenhum aluno cadastrado para esta equipe ainda.
+                </div>
+              ) : (
+                <div className="divide-y divide-slate-100">
+                  {visibleParticipants.map((st, idx) => (
+                    <div key={st.id} className="p-3.5 flex justify-between items-center hover:bg-slate-50 transition">
+                      <div className="flex items-center gap-3">
+                        <span className="text-xs font-black text-slate-400 w-6">{idx + 1}.</span>
+                        <div>
+                          <p className="text-xs font-bold text-slate-800">{st.student_name}</p>
+                          <span className="text-[10px] font-semibold text-slate-500 bg-slate-100 px-2 py-0.5 rounded border border-slate-200">
+                            {st.grade_class}
+                          </span>
+                        </div>
+                      </div>
+
+                      <button 
+                        onClick={() => handleDeleteParticipant(st.id)}
+                        className="text-red-500 hover:text-red-700 p-1.5 rounded-lg hover:bg-red-50 transition"
+                        title="Remover participante"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* TAB 4: EVENTOS */}
         {activeTab === 'eventos' && (
           <div className="space-y-4">
             <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex justify-between items-center">
@@ -508,7 +668,7 @@ export default function App() {
           </div>
         )}
 
-        {/* TAB 4: SEGURANÇA E SENHAS */}
+        {/* TAB 5: SEGURANÇA E SENHAS */}
         {activeTab === 'seguranca' && (
           <div className="space-y-6">
             {userRole === 'LIDER' && (
@@ -553,7 +713,7 @@ export default function App() {
         )}
       </div>
 
-      {/* MODAL: EDITAR EQUIPE */}
+      {/* MODAL: EDITAR EQUIPE (INCLUINDO SALA, LÍDER E VICE) */}
       {editTeamModalOpen && editingTeam && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-50">
           <div className="bg-white rounded-xl max-w-md w-full p-6 shadow-2xl">
@@ -579,6 +739,38 @@ export default function App() {
                   className="w-full text-xs p-2 border border-slate-300 rounded-lg"
                   required
                 />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">Sala da Equipe</label>
+                <input 
+                  type="text" 
+                  value={editingTeam.classroom || ''}
+                  onChange={(e) => setEditingTeam({ ...editingTeam, classroom: e.target.value })}
+                  placeholder="Ex: Sala 04 / Bloco B"
+                  className="w-full text-xs p-2 border border-slate-300 rounded-lg"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">Nome do Líder</label>
+                  <input 
+                    type="text" 
+                    value={editingTeam.leader_name || ''}
+                    onChange={(e) => setEditingTeam({ ...editingTeam, leader_name: e.target.value })}
+                    className="w-full text-xs p-2 border border-slate-300 rounded-lg"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">Nome do Vice-Líder</label>
+                  <input 
+                    type="text" 
+                    value={editingTeam.vice_leader_name || ''}
+                    onChange={(e) => setEditingTeam({ ...editingTeam, vice_leader_name: e.target.value })}
+                    className="w-full text-xs p-2 border border-slate-300 rounded-lg"
+                  />
+                </div>
               </div>
 
               <div>
