@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { 
   Trophy, ShieldAlert, Users, Plus, 
-  BarChart3, LogOut, Edit3 
+  BarChart3, LogOut, Edit3, Calendar, MapPin, Clock, CheckCircle2, AlertCircle
 } from 'lucide-react';
 import { supabase } from './supabaseClient';
 
@@ -15,6 +15,17 @@ export interface Team {
   total_score: number;
 }
 
+export interface EventItem {
+  id: string;
+  title: string;
+  date: string;
+  time: string;
+  location: string;
+  points: number;
+  description: string;
+  status: 'PENDENTE' | 'EM_ANDAMENTO' | 'CONCLUIDO';
+}
+
 export default function App() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [userRole, setUserRole] = useState<UserRole>('LIDER');
@@ -25,8 +36,8 @@ export default function App() {
 
   const [teams, setTeams] = useState<Team[]>([]);
   const [loading, setLoading] = useState(true);
-  const [isSaving, setIsSaving] = useState(false); // Estado para controlar o botão de salvar
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'equipe' | 'pontos'>('dashboard');
+  const [isSaving, setIsSaving] = useState(false);
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'equipe' | 'eventos'>('dashboard');
 
   // Modais
   const [editTeamModalOpen, setEditTeamModalOpen] = useState(false);
@@ -35,6 +46,40 @@ export default function App() {
   const [scoreModalOpen, setScoreModalOpen] = useState(false);
   const [targetTeamId, setTargetTeamId] = useState('');
   const [pointsDelta, setPointsDelta] = useState<number>(0);
+
+  // Lista de Eventos / Provas da Gincana
+  const [eventsList, setEventsList] = useState<EventItem[]>([
+    {
+      id: '1',
+      title: 'Abertura & Desfile das Equipes',
+      date: '2026-05-10',
+      time: '08:00',
+      location: 'Quadra Coberta',
+      points: 100,
+      description: 'Apresentação do grito de guerra, bandeira e caracterização dos integrantes de cada equipe.',
+      status: 'PENDENTE'
+    },
+    {
+      id: '2',
+      title: 'Prova Solidária - Arrecadação de Alimentos',
+      date: '2026-05-12',
+      time: '14:00',
+      location: 'Pátio Central',
+      points: 300,
+      description: 'Contagem dos alimentos não perecíveis doados pelas equipes.',
+      status: 'PENDENTE'
+    },
+    {
+      id: '3',
+      title: 'Circuito Esportivo e Recreativo',
+      date: '2026-05-15',
+      time: '09:00',
+      location: 'Campo e Quadra',
+      points: 200,
+      description: 'Competições esportivas e gincana de agilidade entre as turmas.',
+      status: 'PENDENTE'
+    }
+  ]);
 
   // Buscar equipes do Supabase
   useEffect(() => {
@@ -94,23 +139,20 @@ export default function App() {
     }
   };
 
-  // Salvar edições de Nome, Cor e Professor no Supabase
   const handleSaveTeamEdit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingTeam || userRole !== 'ADMIN' || isSaving) return;
 
     try {
       setIsSaving(true);
-
-      const { data, error } = await supabase
+      const { error } = await supabase
         .from('teams')
         .update({
           name: editingTeam.name,
           color_hex: editingTeam.color_hex,
           teacher_in_charge: editingTeam.teacher_in_charge,
         })
-        .eq('id', editingTeam.id)
-        .select();
+        .eq('id', editingTeam.id);
 
       if (error) {
         alert('ERRO DO SUPABASE: ' + error.message);
@@ -127,7 +169,6 @@ export default function App() {
     }
   };
 
-  // Salvar alteração de Pontos no Supabase
   const handleScoreAdjustment = async (e: React.FormEvent) => {
     e.preventDefault();
     if (userRole !== 'ADMIN' || isSaving) return;
@@ -262,6 +303,13 @@ export default function App() {
           >
             <Users className="w-4 h-4" /> Equipes
           </button>
+
+          <button 
+            onClick={() => setActiveTab('eventos')} 
+            className={`pb-3 font-semibold text-sm flex items-center gap-2 border-b-2 ${activeTab === 'eventos' ? 'border-amber-500 text-amber-600' : 'border-transparent text-slate-500'}`}
+          >
+            <Calendar className="w-4 h-4" /> Cronograma de Eventos
+          </button>
         </div>
 
         {activeTab === 'dashboard' && (
@@ -287,7 +335,7 @@ export default function App() {
               <p className="text-xs text-slate-500 italic">Carregando informações do banco de dados...</p>
             ) : teams.length === 0 ? (
               <div className="p-6 bg-white border border-red-200 text-red-700 rounded-xl text-xs font-semibold">
-                Nenhuma equipe foi encontrada no Supabase. Verifique se criou os dados no SQL Editor do Supabase.
+                Nenhuma equipe foi encontrada no Supabase.
               </div>
             ) : (
               <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
@@ -336,11 +384,49 @@ export default function App() {
                     }}
                     className="flex items-center gap-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 px-3 py-1.5 rounded-lg text-xs font-bold transition border border-slate-200"
                   >
-                    <Edit3 className="w-3.5 h-3.5" /> Editar
+                    <Edit3 className="w-3.5 h-3.5" /> Editar no Supabase
                   </button>
                 )}
               </div>
             ))}
+          </div>
+        )}
+
+        {activeTab === 'eventos' && (
+          <div className="space-y-4">
+            <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
+              <h2 className="text-base font-bold text-slate-900 flex items-center gap-2">
+                <Calendar className="w-5 h-5 text-amber-500" /> Programação de Provas e Eventos
+              </h2>
+              <p className="text-xs text-slate-500 mt-1">Confira as datas, horários e locais das provas da Gincana Escolar 2026.</p>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              {eventsList.map(ev => (
+                <div key={ev.id} className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm flex flex-col justify-between">
+                  <div>
+                    <div className="flex justify-between items-start mb-2">
+                      <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-100 text-amber-800">
+                        {ev.points} Pontos em Disputa
+                      </span>
+                      <span className="text-[11px] font-semibold text-slate-500 flex items-center gap-1">
+                        <Clock className="w-3.5 h-3.5 text-slate-400" /> {ev.time}
+                      </span>
+                    </div>
+
+                    <h3 className="text-sm font-black text-slate-900 mb-1">{ev.title}</h3>
+                    <p className="text-xs text-slate-600 mb-3">{ev.description}</p>
+                  </div>
+
+                  <div className="border-t border-slate-100 pt-3 text-[11px] text-slate-500 flex justify-between items-center">
+                    <span className="flex items-center gap-1">
+                      <MapPin className="w-3.5 h-3.5 text-amber-600" /> {ev.location}
+                    </span>
+                    <span className="font-semibold text-slate-700">{ev.date}</span>
+                  </div>
+                </div>
+              ))}
+            </div>
           </div>
         )}
       </div>
