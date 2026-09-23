@@ -39,14 +39,14 @@ export interface ScoreAuditLog {
 }
 
 const INITIAL_TEAMS: Team[] = [
-  { id: '1', name: 'Equipa Amarela', color_hex: '#F59E0B', teacher_in_charge: 'Prof. Carlos', total_score: 0 },
-  { id: '2', name: 'Equipa Azul', color_hex: '#3B82F6', teacher_in_charge: 'Profa. Mariana', total_score: 0 },
-  { id: '3', name: 'Equipa Verde', color_hex: '#10B981', teacher_in_charge: 'Prof. Roberto', total_score: 0 },
-  { id: '4', name: 'Equipa Vermelha', color_hex: '#EF4444', teacher_in_charge: 'Profa. Ana', total_score: 0 },
+  { id: '1', name: 'Equipe Amarela', color_hex: '#F59E0B', teacher_in_charge: 'Prof. Carlos', total_score: 0 },
+  { id: '2', name: 'Equipe Azul', color_hex: '#3B82F6', teacher_in_charge: 'Profa. Mariana', total_score: 0 },
+  { id: '3', name: 'Equipe Verde', color_hex: '#10B981', teacher_in_charge: 'Prof. Roberto', total_score: 0 },
+  { id: '4', name: 'Equipe Vermelha', color_hex: '#EF4444', teacher_in_charge: 'Profa. Ana', total_score: 0 },
 ];
 
 const INITIAL_SCHEDULE: ScheduleItem[] = [
-  { id: '1', date: '06/10', time: '08:00', title: 'Abertura Oficial e Apresentação das Equipas', location: 'Quadra Coberta', max_points: 50 },
+  { id: '1', date: '06/10', time: '08:00', title: 'Abertura Oficial e Apresentação das Equipes', location: 'Quadra Coberta', max_points: 50 },
   { id: '2', date: '07/10', time: '09:30', title: 'Entrega da Prova Solidária (Alimentos)', location: 'Pátio Central', max_points: 100 },
 ];
 
@@ -69,7 +69,7 @@ export default function App() {
   const [pointsDelta, setPointsDelta] = useState<number>(0);
   const [scoreReason, setScoreReason] = useState('');
 
-  // Modal Edição de Equipa
+  // Modal Edição de Equipe
   const [editTeamModalOpen, setEditTeamModalOpen] = useState(false);
   const [editingTeam, setEditingTeam] = useState<Team | null>(null);
 
@@ -178,7 +178,7 @@ export default function App() {
 
           <form onSubmit={handleLogin} className="space-y-4">
             <div>
-              <label className="block text-xs font-bold text-slate-700 mb-1">Selecione a sua Equipa</label>
+              <label className="block text-xs font-bold text-slate-700 mb-1">Selecione a sua Equipe</label>
               <select 
                 value={loginTeamSelect}
                 onChange={(e) => setLoginTeamSelect(e.target.value)}
@@ -213,7 +213,7 @@ export default function App() {
           <div className="mt-6 p-3 bg-slate-50 rounded-lg border border-slate-200 text-[11px] text-slate-500">
             <p><strong>Acesso de Teste:</strong></p>
             <p>• Comissão (Admin): <code>admin2026</code></p>
-            <p>• Líder de Equipa: <code>lider2026</code></p>
+            <p>• Líder de Equipe: <code>lider2026</code></p>
           </div>
         </div>
       </div>
@@ -251,7 +251,7 @@ export default function App() {
 
       <div className="bg-gradient-to-r from-blue-700 via-indigo-600 to-purple-700 text-white text-center py-2 px-4 font-medium text-xs flex justify-center items-center gap-2">
         <Clock className="w-3.5 h-3.5 animate-pulse" />
-        <span>PRÓXIMO EVENTO: <strong>Apresentação das Equipas & Abertura Oficial</strong></span>
+        <span>PRÓXIMO EVENTO: <strong>Apresentação das Equipes & Abertura Oficial</strong></span>
       </div>
 
       <div className="max-w-7xl mx-auto px-4 mt-6">
@@ -267,7 +267,7 @@ export default function App() {
             onClick={() => setActiveTab('equipe')} 
             className={`pb-3 px-4 font-semibold text-sm flex items-center gap-2 border-b-2 whitespace-nowrap ${activeTab === 'equipe' ? 'border-amber-500 text-amber-600' : 'border-transparent text-slate-500 hover:text-slate-800'}`}
           >
-            <Users className="w-4 h-4" /> {userRole === 'ADMIN' ? 'Todas as Equipas' : 'A Minha Equipa'}
+            <Users className="w-4 h-4" /> {userRole === 'ADMIN' ? 'Todas as Equipes' : 'A Minha Equipe'}
           </button>
 
           <button 
@@ -361,7 +361,7 @@ export default function App() {
                           }}
                           className="flex items-center gap-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 px-3 py-1.5 rounded-lg text-xs font-bold transition border border-slate-200"
                         >
-                          <Edit3 className="w-3.5 h-3.5" /> Editar Equipa
+                          <Edit3 className="w-3.5 h-3.5" /> Editar Equipe
                         </button>
                       )}
                       <div className="bg-slate-100 px-3 py-1.5 rounded-lg font-bold text-slate-700 text-xs">
@@ -372,7 +372,7 @@ export default function App() {
 
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-6">
                     <div className="space-y-4">
-                      <h4 className="font-bold text-slate-800 text-xs uppercase tracking-wide">Mascote da Equipa</h4>
+                      <h4 className="font-bold text-slate-800 text-xs uppercase tracking-wide">Mascote da Equipe</h4>
                       <div className="border border-dashed border-slate-300 rounded-xl p-4 text-center bg-slate-50">
                         <Upload className="w-6 h-6 mx-auto text-slate-400 mb-2" />
                         <p className="text-xs text-slate-500">Carregar fotografia do mascote</p>
@@ -383,7 +383,7 @@ export default function App() {
                       <h4 className="font-bold text-slate-800 text-xs uppercase tracking-wide">Grito de Guerra</h4>
                       <textarea 
                         rows={3}
-                        placeholder="Escreva o grito de guerra da equipa aqui..."
+                        placeholder="Escreva o grito de guerra da equipe aqui..."
                         className="w-full text-xs p-2.5 bg-slate-50 border border-slate-200 rounded-lg"
                       />
                     </div>
@@ -459,7 +459,7 @@ export default function App() {
                   <thead>
                     <tr className="bg-slate-100 text-slate-700">
                       <th className="p-2">Data</th>
-                      <th className="p-2">Equipa</th>
+                      <th className="p-2">Equipe</th>
                       <th className="p-2">Pontos</th>
                       <th className="p-2">Motivo</th>
                     </tr>
@@ -488,7 +488,7 @@ export default function App() {
             <h3 className="text-base font-bold text-slate-900 mb-3">Lançar / Retirar Pontos</h3>
             <form onSubmit={handleScoreAdjustment} className="space-y-3">
               <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">Equipa</label>
+                <label className="block text-xs font-bold text-slate-700 mb-1">Equipe</label>
                 <select 
                   value={targetTeamId}
                   onChange={(e) => setTargetTeamId(e.target.value)}
@@ -544,14 +544,14 @@ export default function App() {
         </div>
       )}
 
-      {/* MODAL: Editar Equipa (Comissão) */}
+      {/* MODAL: Editar Equipe (Comissão) */}
       {editTeamModalOpen && editingTeam && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-50">
           <div className="bg-white rounded-xl max-w-md w-full p-6 shadow-2xl">
-            <h3 className="text-base font-bold text-slate-900 mb-3">Editar Dados da Equipa</h3>
+            <h3 className="text-base font-bold text-slate-900 mb-3">Editar Dados da Equipe</h3>
             <form onSubmit={handleSaveTeamEdit} className="space-y-3">
               <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">Nome da Equipa</label>
+                <label className="block text-xs font-bold text-slate-700 mb-1">Nome da Equipe</label>
                 <input 
                   type="text" 
                   value={editingTeam.name}
@@ -573,7 +573,7 @@ export default function App() {
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">Cor da Equipa (Hexadecimal)</label>
+                <label className="block text-xs font-bold text-slate-700 mb-1">Cor da Equipe (Hexadecimal)</label>
                 <div className="flex gap-2 items-center">
                   <input 
                     type="color" 
