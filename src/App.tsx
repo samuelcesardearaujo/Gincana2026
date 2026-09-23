@@ -124,14 +124,29 @@ export default function App() {
     setScoreReason('');
   };
 
-  const handleSaveTeamEdit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!editingTeam || userRole !== 'ADMIN') return;
+  const handleSaveTeamEdit = async (e: React.FormEvent) => {
+  e.preventDefault();
+  if (!editingTeam || userRole !== 'ADMIN') return;
 
-    setTeams(prev => prev.map(t => t.id === editingTeam.id ? editingTeam : t));
+  const { error } = await supabase
+    .from('teams')
+    .update({
+      name: editingTeam.name,
+      color_hex: editingTeam.color_hex,
+      teacher_in_charge: editingTeam.teacher_in_charge,
+    })
+    .eq('id', editingTeam.id);
+
+  if (error) {
+    console.error('Erro detalhado do Supabase:', error);
+    alert(`Erro ao salvar: ${error.message}`);
+  } else {
+    alert('Alteração salva com sucesso no Supabase!');
     setEditTeamModalOpen(false);
     setEditingTeam(null);
-  };
+    fetchTeams(); // Atualiza a lista com as informações do banco
+  }
+};
 
   const handleAddScheduleItem = (e: React.FormEvent) => {
     e.preventDefault();
