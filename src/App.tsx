@@ -336,7 +336,7 @@ export default function App() {
                     }}
                     className="flex items-center gap-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 px-3 py-1.5 rounded-lg text-xs font-bold transition border border-slate-200"
                   >
-                    <Edit3 className="w-3.5 h-3.5" /> Editar no Supabase
+                    <Edit3 className="w-3.5 h-3.5" /> Editar
                   </button>
                 )}
               </div>
