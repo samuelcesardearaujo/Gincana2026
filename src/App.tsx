@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { 
-  Trophy, ShieldAlert, Calendar, Gift, Users, 
-  Upload, Plus, Clock, BarChart3, LogOut, Edit3, Trash2, MapPin, Award
+  Trophy, ShieldAlert, Users, Plus, 
+  BarChart3, LogOut, Edit3 
 } from 'lucide-react';
 import { supabase } from './supabaseClient';
 
@@ -25,6 +25,7 @@ export default function App() {
 
   const [teams, setTeams] = useState<Team[]>([]);
   const [loading, setLoading] = useState(true);
+  const [isSaving, setIsSaving] = useState(false); // Estado para controlar o botão de salvar
   const [activeTab, setActiveTab] = useState<'dashboard' | 'equipe' | 'pontos'>('dashboard');
 
   // Modais
@@ -35,11 +36,10 @@ export default function App() {
   const [targetTeamId, setTargetTeamId] = useState('');
   const [pointsDelta, setPointsDelta] = useState<number>(0);
 
-  // Buscar equipes diretamente do Supabase ao carregar
+  // Buscar equipes do Supabase
   useEffect(() => {
     fetchTeams();
 
-    // Escutar alterações em tempo real no Supabase
     const channel = supabase
       .channel('schema-db-changes')
       .on(
@@ -57,22 +57,27 @@ export default function App() {
   }, []);
 
   const fetchTeams = async () => {
-    setLoading(true);
-    const { data, error } = await supabase
-      .from('teams')
-      .select('*')
-      .order('total_score', { ascending: false });
+    try {
+      setLoading(true);
+      const { data, error } = await supabase
+        .from('teams')
+        .select('*')
+        .order('total_score', { ascending: false });
 
-    if (error) {
-      console.error('Erro ao buscar dados do Supabase:', error);
-    } else if (data) {
-      setTeams(data);
-      if (data.length > 0 && !loginTeamSelect) {
-        setLoginTeamSelect(data[0].id);
-        setTargetTeamId(data[0].id);
+      if (error) {
+        console.error('Erro ao buscar equipes:', error.message);
+      } else if (data) {
+        setTeams(data);
+        if (data.length > 0 && !loginTeamSelect) {
+          setLoginTeamSelect(data[0].id);
+          setTargetTeamId(data[0].id);
+        }
       }
+    } catch (err: any) {
+      console.error('Erro de conexão ao buscar:', err);
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   };
 
   const handleLogin = (e: React.FormEvent) => {
@@ -92,49 +97,65 @@ export default function App() {
   // Salvar edições de Nome, Cor e Professor no Supabase
   const handleSaveTeamEdit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!editingTeam || userRole !== 'ADMIN') return;
+    if (!editingTeam || userRole !== 'ADMIN' || isSaving) return;
 
-    const { error } = await supabase
-      .from('teams')
-      .update({
-        name: editingTeam.name,
-        color_hex: editingTeam.color_hex,
-        teacher_in_charge: editingTeam.teacher_in_charge,
-      })
-      .eq('id', editingTeam.id);
+    try {
+      setIsSaving(true);
 
-    if (error) {
-      alert('ERRO DO SUPABASE AO SALVAR: ' + error.message);
-    } else {
-      alert('Sucesso! Alterações salvas no banco de dados!');
-      setEditTeamModalOpen(false);
-      setEditingTeam(null);
-      fetchTeams();
+      const { data, error } = await supabase
+        .from('teams')
+        .update({
+          name: editingTeam.name,
+          color_hex: editingTeam.color_hex,
+          teacher_in_charge: editingTeam.teacher_in_charge,
+        })
+        .eq('id', editingTeam.id)
+        .select();
+
+      if (error) {
+        alert('ERRO DO SUPABASE: ' + error.message);
+      } else {
+        alert('Sucesso! Dados salvos no banco de dados.');
+        setEditTeamModalOpen(false);
+        setEditingTeam(null);
+        await fetchTeams();
+      }
+    } catch (err: any) {
+      alert('Erro inesperado ao salvar: ' + (err.message || err));
+    } finally {
+      setIsSaving(false);
     }
   };
 
   // Salvar alteração de Pontos no Supabase
   const handleScoreAdjustment = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (userRole !== 'ADMIN') return;
+    if (userRole !== 'ADMIN' || isSaving) return;
 
     const team = teams.find(t => t.id === targetTeamId);
     if (!team || pointsDelta === 0) return;
 
-    const newScore = team.total_score + pointsDelta;
+    try {
+      setIsSaving(true);
+      const newScore = team.total_score + pointsDelta;
 
-    const { error } = await supabase
-      .from('teams')
-      .update({ total_score: newScore })
-      .eq('id', team.id);
+      const { error } = await supabase
+        .from('teams')
+        .update({ total_score: newScore })
+        .eq('id', team.id);
 
-    if (error) {
-      alert('ERRO DO SUPABASE AO ATUALIZAR PONTOS: ' + error.message);
-    } else {
-      alert('Pontuação atualizada e salva com sucesso!');
-      setScoreModalOpen(false);
-      setPointsDelta(0);
-      fetchTeams();
+      if (error) {
+        alert('ERRO DO SUPABASE AO ATUALIZAR PONTOS: ' + error.message);
+      } else {
+        alert('Pontuação atualizada com sucesso!');
+        setScoreModalOpen(false);
+        setPointsDelta(0);
+        await fetchTeams();
+      }
+    } catch (err: any) {
+      alert('Erro ao atualizar pontuação: ' + (err.message || err));
+    } finally {
+      setIsSaving(false);
     }
   };
 
@@ -266,7 +287,7 @@ export default function App() {
               <p className="text-xs text-slate-500 italic">Carregando informações do banco de dados...</p>
             ) : teams.length === 0 ? (
               <div className="p-6 bg-white border border-red-200 text-red-700 rounded-xl text-xs font-semibold">
-                Nenhuma equipe foi encontrada no Supabase. Verifique se executou o script SQL no painel do Supabase.
+                Nenhuma equipe foi encontrada no Supabase. Verifique se criou os dados no SQL Editor do Supabase.
               </div>
             ) : (
               <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
@@ -376,15 +397,17 @@ export default function App() {
                 <button 
                   type="button" 
                   onClick={() => setEditTeamModalOpen(false)}
-                  className="px-3 py-1.5 border border-slate-300 rounded-lg text-xs font-bold"
+                  disabled={isSaving}
+                  className="px-3 py-1.5 border border-slate-300 rounded-lg text-xs font-bold disabled:opacity-50"
                 >
                   Cancelar
                 </button>
                 <button 
                   type="submit"
-                  className="px-3 py-1.5 bg-amber-600 text-white rounded-lg text-xs font-bold"
+                  disabled={isSaving}
+                  className="px-3 py-1.5 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-xs font-bold disabled:opacity-50"
                 >
-                  Salvar no Supabase
+                  {isSaving ? 'Salvando...' : 'Salvar no Supabase'}
                 </button>
               </div>
             </form>
@@ -427,15 +450,17 @@ export default function App() {
                 <button 
                   type="button" 
                   onClick={() => setScoreModalOpen(false)}
-                  className="px-3 py-1.5 border border-slate-300 rounded-lg text-xs font-bold"
+                  disabled={isSaving}
+                  className="px-3 py-1.5 border border-slate-300 rounded-lg text-xs font-bold disabled:opacity-50"
                 >
                   Cancelar
                 </button>
                 <button 
                   type="submit"
-                  className="px-3 py-1.5 bg-amber-600 text-white rounded-lg text-xs font-bold"
+                  disabled={isSaving}
+                  className="px-3 py-1.5 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-xs font-bold disabled:opacity-50"
                 >
-                  Confirmar e Salvar
+                  {isSaving ? 'Salvando...' : 'Confirmar e Salvar'}
                 </button>
               </div>
             </form>
